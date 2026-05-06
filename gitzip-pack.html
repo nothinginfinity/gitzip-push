@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>gitzip-push — pack &amp; push</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root{--bg:#171614;--surface:#1c1b19;--surface-2:#201f1d;--surface-off:#1d1c1a;--border:#393836;--divider:#262523;--text:#cdccca;--text-muted:#797876;--text-faint:#5a5957;--primary:#4f98a3;--primary-hover:#227f8b;--primary-hl:#313b3b;--success:#6daa45;--error:#d163a7;--radius:0.5rem;--radius-lg:0.75rem;--radius-full:9999px;--font:'Inter',system-ui,sans-serif;}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{-webkit-text-size-adjust:none;-webkit-font-smoothing:antialiased;}
+body{min-height:100dvh;font-family:var(--font);font-size:15px;color:var(--text);background:var(--bg);display:flex;flex-direction:column;align-items:center;padding:2rem 1rem 4rem;}
+.card{width:100%;max-width:560px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;}
+.card-header{padding:1.25rem 1.5rem;border-bottom:1px solid var(--divider);display:flex;align-items:center;gap:0.75rem;}
+.card-title{font-size:1rem;font-weight:700;color:var(--text);}
+.badge{font-size:10px;font-weight:700;background:var(--primary-hl);color:var(--primary);padding:2px 8px;border-radius:var(--radius-full);text-transform:uppercase;letter-spacing:0.04em;}
+.card-body{padding:1.25rem 1.5rem;display:flex;flex-direction:column;gap:1rem;}
+.field{display:flex;flex-direction:column;gap:0.375rem;}
+.label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);}
+.input{background:var(--surface-off);border:1px solid var(--border);border-radius:var(--radius);padding:0.625rem 0.75rem;font-size:14px;color:var(--text);width:100%;min-height:40px;transition:border-color 150ms;}
+.input:focus{outline:none;border-color:var(--primary);}
+.input::placeholder{color:var(--text-faint);}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;}
+.drop-zone{border:2px dashed var(--border);border-radius:var(--radius-lg);padding:2rem 1rem;text-align:center;cursor:pointer;transition:border-color 150ms,background 150ms;display:flex;flex-direction:column;align-items:center;gap:0.5rem;color:var(--text-muted);}
+.drop-zone:hover,.drop-zone.drag-over{border-color:var(--primary);background:color-mix(in oklch,var(--primary) 6%,var(--surface));color:var(--text);}
+.drop-zone svg{opacity:.4;}
+.drop-zone p{font-size:13px;}
+.drop-zone span{font-size:11px;color:var(--text-faint);}
+.file-list{display:flex;flex-direction:column;gap:0.25rem;max-height:180px;overflow-y:auto;}
+.file-row{display:flex;align-items:center;gap:0.5rem;padding:0.375rem 0.5rem;background:var(--surface-2);border-radius:var(--radius);font-size:13px;}
+.file-row-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.file-row-size{font-size:11px;color:var(--text-faint);flex-shrink:0;}
+.file-row-dest{flex-shrink:0;}
+.file-row-dest input{background:transparent;border:1px solid var(--border);border-radius:4px;padding:2px 6px;font-size:12px;color:var(--text);width:160px;}
+.file-row-dest input:focus{outline:none;border-color:var(--primary);}
+.remove-btn{width:24px;height:24px;display:flex;align-items:center;justify-content:center;color:var(--text-faint);border-radius:4px;cursor:pointer;background:none;border:none;flex-shrink:0;}
+.remove-btn:hover{color:var(--error);background:color-mix(in oklch,var(--error) 10%,var(--surface));}
+btn{cursor:pointer;}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;padding:0.625rem 1.25rem;font-size:14px;font-weight:600;border-radius:var(--radius);min-height:40px;border:none;cursor:pointer;width:100%;transition:background 150ms;}
+.btn-primary{background:var(--primary);color:#fff;}
+.btn-primary:hover{background:var(--primary-hover);}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed;}
+.status{font-size:13px;min-height:20px;padding:0.5rem 0;line-height:1.5;}
+.status.ok{color:var(--success);}
+.status.err{color:var(--error);}
+.status.loading{color:var(--primary);}
+.divider{border:none;border-top:1px solid var(--divider);margin:0;}
+.footer{margin-top:2rem;font-size:12px;color:var(--text-faint);text-align:center;}
+.footer a{color:var(--primary);text-decoration:none;}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-header">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" color="#4f98a3"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    <span class="card-title">gitzip-push</span>
+    <span class="badge">pack &amp; push</span>
+  </div>
+  <div class="card-body">
+
+    <div class="field">
+      <label class="label" for="target-repo">Target repo</label>
+      <input class="input" id="target-repo" type="text" placeholder="owner/repo" autocomplete="off" autocapitalize="none" spellcheck="false">
+    </div>
+
+    <div class="row2">
+      <div class="field">
+        <label class="label" for="target-branch">Branch</label>
+        <input class="input" id="target-branch" type="text" placeholder="main" value="main" autocomplete="off" autocapitalize="none" spellcheck="false">
+      </div>
+      <div class="field">
+        <label class="label" for="pat-input">GitHub PAT</label>
+        <input class="input" id="pat-input" type="password" placeholder="ghp_..." autocomplete="off">
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="label" for="commit-msg">Commit message</label>
+      <input class="input" id="commit-msg" type="text" placeholder="feat: update files" autocomplete="off">
+    </div>
+
+    <hr class="divider">
+
+    <div class="drop-zone" id="drop-zone" role="button" tabindex="0" aria-label="Drop files or click to select">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <p>Drop files here or <strong>click to select</strong></p>
+      <span>Any file type &mdash; up to ~50 MB total</span>
+    </div>
+    <input type="file" id="file-input" multiple style="display:none">
+
+    <div class="file-list" id="file-list" style="display:none"></div>
+
+    <button class="btn btn-primary" id="push-btn" disabled>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+      Pack &amp; Push to GitHub
+    </button>
+    <div class="status" id="status"></div>
+
+  </div>
+</div>
+<p class="footer">Part of <a href="https://github.com/nothinginfinity/gitzip-push" target="_blank">gitzip-push</a> &mdash; no install, no build step.</p>
+
+<script>
+const dropZone=document.getElementById('drop-zone');
+const fileInput=document.getElementById('file-input');
+const fileListEl=document.getElementById('file-list');
+const pushBtn=document.getElementById('push-btn');
+const statusEl=document.getElementById('status');
+let stagedFiles=[];
+
+function fmtSize(b){if(b<1024)return b+' B';if(b<1024*1024)return(b/1024).toFixed(1)+' KB';return(b/(1024*1024)).toFixed(1)+' MB';}
+
+dropZone.addEventListener('click',()=>fileInput.click());
+dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fileInput.click();}});
+dropZone.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('drag-over');});
+dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('drag-over');addFiles(Array.from(e.dataTransfer.files));});
+fileInput.addEventListener('change',()=>{addFiles(Array.from(fileInput.files));fileInput.value='';});
+
+function addFiles(files){
+  files.forEach(f=>{
+    if(!stagedFiles.find(s=>s.file.name===f.name&&s.file.size===f.size)){
+      stagedFiles.push({file:f,dest:f.name});
+    }
+  });
+  renderList();
+}
+
+function renderList(){
+  fileListEl.innerHTML='';
+  if(!stagedFiles.length){fileListEl.style.display='none';checkReady();return;}
+  fileListEl.style.display='flex';
+  stagedFiles.forEach((item,i)=>{
+    const row=document.createElement('div');row.className='file-row';
+    const nameEl=document.createElement('span');nameEl.className='file-row-name';nameEl.textContent=item.file.name;
+    const sizeEl=document.createElement('span');sizeEl.className='file-row-size';sizeEl.textContent=fmtSize(item.file.size);
+    const destWrap=document.createElement('div');destWrap.className='file-row-dest';
+    const destInput=document.createElement('input');destInput.type='text';destInput.value=item.dest;destInput.placeholder='dest/path';
+    destInput.addEventListener('input',()=>{stagedFiles[i].dest=destInput.value.trim();checkReady();});
+    destWrap.appendChild(destInput);
+    const rmBtn=document.createElement('button');rmBtn.className='remove-btn';rmBtn.innerHTML='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';rmBtn.title='Remove';
+    rmBtn.addEventListener('click',()=>{stagedFiles.splice(i,1);renderList();});
+    row.appendChild(nameEl);row.appendChild(sizeEl);row.appendChild(destWrap);row.appendChild(rmBtn);
+    fileListEl.appendChild(row);
+  });
+  checkReady();
+}
+
+function checkReady(){
+  const repo=document.getElementById('target-repo').value.trim();
+  const pat=document.getElementById('pat-input').value.trim();
+  const msg=document.getElementById('commit-msg').value.trim();
+  const hasFiles=stagedFiles.length>0&&stagedFiles.every(f=>f.dest);
+  pushBtn.disabled=!(repo&&pat&&msg&&hasFiles);
+}
+
+['target-repo','pat-input','commit-msg','target-branch'].forEach(id=>document.getElementById(id).addEventListener('input',checkReady));
+
+async function readFile(f){return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsArrayBuffer(f);});}
+
+pushBtn.addEventListener('click',async()=>{
+  const repoFull=document.getElementById('target-repo').value.trim();
+  const branch=document.getElementById('target-branch').value.trim()||'main';
+  const pat=document.getElementById('pat-input').value.trim();
+  const commitMsg=document.getElementById('commit-msg').value.trim();
+  const [owner,repo]=repoFull.split('/');
+  if(!owner||!repo){setStatus('Invalid repo format — use owner/repo','err');return;}
+
+  pushBtn.disabled=true;
+  setStatus('Building zip…','loading');
+
+  try{
+    const zip=new JSZip();
+    const manifest={version:1,created:new Date().toISOString(),target_branch:branch,commit_message:commitMsg,files:[]};
+
+    for(const item of stagedFiles){
+      const buf=await readFile(item.file);
+      zip.file(item.file.name,buf);
+      manifest.files.push({src:item.file.name,dest:item.dest});
+    }
+    zip.file('gitzip-manifest.json',JSON.stringify(manifest,null,2));
+
+    setStatus('Compressing…','loading');
+    const blob=await zip.generateAsync({type:'base64',compression:'DEFLATE',compressionOptions:{level:6}});
+
+    const dropPath=`_gitzip/drop-${Date.now()}.zip`;
+    setStatus(`Pushing to ${owner}/${repo}/${dropPath}…`,'loading');
+
+    let sha=null;
+    const check=await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${dropPath}`,{headers:{'Authorization':`token ${pat}`,'Accept':'application/vnd.github+json'}});
+    if(check.ok){const d=await check.json();sha=d.sha;}
+
+    const body={message:`gitzip: drop ${stagedFiles.length} file${stagedFiles.length!==1?'s':''}`,content:blob,branch};
+    if(sha)body.sha=sha;
+
+    const put=await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${dropPath}`,{method:'PUT',headers:{'Authorization':`token ${pat}`,'Content-Type':'application/json','Accept':'application/vnd.github+json'},body:JSON.stringify(body)});
+    if(!put.ok){const e=await put.text();throw new Error(`GitHub ${put.status}: ${e.slice(0,200)}`);}
+    const result=await put.json();
+    setStatus(`✓ Pushed → ${dropPath} (commit ${result.commit?.sha?.slice(0,7)||'?'}). Unpack Action will extract files to their destinations.`,'ok');
+  }catch(e){setStatus('Error: '+e.message,'err');}
+  finally{pushBtn.disabled=false;checkReady();}
+});
+
+function setStatus(msg,type){
+  statusEl.textContent=msg;
+  statusEl.className='status'+(type?' '+type:'');
+}
+</script>
+</body>
+</html>

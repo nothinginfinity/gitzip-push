@@ -1,0 +1,112 @@
+# gitzip-unpack.yml
+# Reference implementation of the gitzip unpack Action.
+#
+# INSTALL:
+#   Copy this file to .github/workflows/gitzip-unpack.yml in your target repo.
+#   Add a repo secret named GITZIP_TOKEN (PAT with contents:write on this repo).
+#
+# HOW IT WORKS:
+#   1. Triggers when a .zip is pushed to _gitzip/
+#   2. Downloads the zip, reads gitzip-manifest.json
+#   3. Extracts each file to its dest path and commits to target_branch
+#   4. Deletes the zip from _gitzip/ (cleanup)
+
+name: gitzip-unpack
+
+on:
+  push:
+    paths:
+      - '_gitzip/**.zip'
+
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITZIP_TOKEN || secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Find new zip drops
+        id: find
+        run: |
+          # Get list of .zip files added in this push
+          ZIPS=$(git diff-tree --no-commit-id -r --name-only --diff-filter=A ${{ github.sha }} | grep '^_gitzip/.*\.zip$' || true)
+          echo "zips=$ZIPS" >> $GITHUB_OUTPUT
+          echo "Found zips: $ZIPS"
+
+      - name: Unpack and commit each zip
+        if: steps.find.outputs.zips != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITZIP_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          git config user.name  "gitzip-unpack[bot]"
+          git config user.email "gitzip-unpack[bot]@users.noreply.github.com"
+
+          for ZIP_PATH in ${{ steps.find.outputs.zips }}; do
+            echo "--- Processing $ZIP_PATH ---"
+
+            # Extract zip to a temp dir
+            TMPDIR=$(mktemp -d)
+            unzip -q "$ZIP_PATH" -d "$TMPDIR"
+
+            # Read manifest
+            MANIFEST="$TMPDIR/gitzip-manifest.json"
+            if [ ! -f "$MANIFEST" ]; then
+              echo "No gitzip-manifest.json found in $ZIP_PATH — skipping"
+              continue
+            fi
+
+            TARGET_BRANCH=$(jq -r '.target_branch' "$MANIFEST")
+            COMMIT_MSG=$(jq -r '.commit_message' "$MANIFEST")
+            VERSION=$(jq -r '.version' "$MANIFEST")
+
+            echo "Version: $VERSION"
+            echo "Target branch: $TARGET_BRANCH"
+            echo "Commit message: $COMMIT_MSG"
+
+            # Checkout target branch (create if needed)
+            git fetch origin "$TARGET_BRANCH" 2>/dev/null || true
+            git checkout "$TARGET_BRANCH" 2>/dev/null || git checkout -b "$TARGET_BRANCH"
+
+            # Copy each file to its dest path
+            FILE_COUNT=$(jq '.files | length' "$MANIFEST")
+            for i in $(seq 0 $((FILE_COUNT - 1))); do
+              SRC=$(jq -r ".files[$i].src" "$MANIFEST")
+              DEST=$(jq -r ".files[$i].dest" "$MANIFEST")
+              SRC_PATH="$TMPDIR/$SRC"
+              if [ -f "$SRC_PATH" ]; then
+                mkdir -p "$(dirname "$DEST")"
+                cp "$SRC_PATH" "$DEST"
+                git add "$DEST"
+                echo "  + $SRC -> $DEST"
+              else
+                echo "  ! $SRC not found in zip — skipping"
+              fi
+            done
+
+            # Commit if anything staged
+            if git diff --cached --quiet; then
+              echo "Nothing to commit for $ZIP_PATH"
+            else
+              git commit -m "$COMMIT_MSG"
+              git push origin "$TARGET_BRANCH"
+            fi
+
+            # Go back to default branch for cleanup
+            git checkout ${{ github.ref_name }}
+
+            # Remove the zip drop (cleanup)
+            git rm "$ZIP_PATH"
+            git commit -m "gitzip: cleanup $ZIP_PATH"
+            git push origin ${{ github.ref_name }}
+
+            # Cleanup temp dir
+            rm -rf "$TMPDIR"
+            echo "--- Done with $ZIP_PATH ---"
+          done
